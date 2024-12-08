@@ -14,16 +14,12 @@ import { handlePromiseError } from 'src/utils/misc';
 export class BackupService extends BaseService {
   private backupLock = false;
 
-  @OnEvent({ name: 'config.init' })
+  @OnEvent({ name: 'config.init', workers: [ImmichWorker.MICROSERVICES] })
   async onConfigInit({
     newConfig: {
       backup: { database },
     },
   }: ArgOf<'config.init'>) {
-    if (this.worker !== ImmichWorker.API) {
-      return;
-    }
-
     this.backupLock = await this.databaseRepository.tryLock(DatabaseLock.BackupDatabase);
 
     if (this.backupLock) {
@@ -105,9 +101,8 @@ export class BackupService extends BaseService {
     const databaseVersion = await this.databaseRepository.getPostgresVersion();
     const databaseSemver = semver.coerce(databaseVersion);
     const databaseMajorVersion = databaseSemver?.major;
-    const databaseSupported = semver.satisfies(databaseVersion, '>=14.0.0 <18.0.0');
 
-    if (!databaseMajorVersion || !databaseSupported) {
+    if (!databaseMajorVersion || !databaseSemver || !semver.satisfies(databaseSemver, '>=14.0.0 <18.0.0')) {
       this.logger.error(`Database Backup Failure: Unsupported PostgreSQL version: ${databaseVersion}`);
       return JobStatus.FAILED;
     }
